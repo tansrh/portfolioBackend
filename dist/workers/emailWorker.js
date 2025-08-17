@@ -10,8 +10,13 @@ const connection = {
     tls: {}, // Required for Upstash (enables SSL)
 };
 const worker = new bullmq_1.Worker('emailQueue', async (job) => {
-    const { to, name, subject, html } = job.data;
-    await (0, mail_1.sendMail)({ to, name, subject, html });
+    const { to, from, name, subject, html } = job.data;
+    if (!from) {
+        await (0, mail_1.sendMail)({ to, name, subject, html });
+    }
+    else {
+        await (0, mail_1.sendMailV2)({ from, name, subject, html });
+    }
 }, {
     connection,
     concurrency: 5, // Process up to 5 jobs in parallel

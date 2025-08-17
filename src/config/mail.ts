@@ -32,6 +32,16 @@ export async function sendMail({ to, name, subject, html }: { to: string; name: 
   return transporter.sendMail(mailOptions);
 }
 
+export async function sendMailV2({ to, from, name, subject, html }: { to?: string; from: string, name: string; subject: string; html: string }) {
+  const mailOptions = {
+    from: process.env.BREVO_FROM,
+    to: to ?? process.env.BREVO_FROM,
+    subject,
+    html,
+  };
+  return transporter.sendMail(mailOptions);
+}
+
 
 
 // Interpolator: replaces {{variable}} with values from data object

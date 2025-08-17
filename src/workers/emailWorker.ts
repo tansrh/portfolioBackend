@@ -1,5 +1,5 @@
 import { Worker } from 'bullmq';
-import { sendMail } from '../config/mail';
+import { sendMail, sendMailV2 } from '../config/mail';
 import { RedisOptions } from 'ioredis'; 
 import 'dotenv/config';
 const connection: RedisOptions = {
@@ -12,8 +12,13 @@ const connection: RedisOptions = {
 const worker = new Worker(
   'emailQueue',
   async job => {
-    const { to, name, subject, html } = job.data;
-    await sendMail({ to, name, subject, html });
+    const { to, from, name, subject, html } = job.data;
+    if(!from){
+      await sendMail({ to, name, subject, html });
+    }
+    else{
+      await sendMailV2({ from, name, subject, html });
+    }
   },
   {
     connection,

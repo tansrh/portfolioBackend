@@ -4,6 +4,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendMail = sendMail;
+exports.sendMailV2 = sendMailV2;
 exports.getHtml = getHtml;
 const nodemailer_1 = __importDefault(require("nodemailer"));
 const fs_1 = __importDefault(require("fs"));
@@ -31,6 +32,15 @@ async function sendMail({ to, name, subject, html }) {
     const mailOptions = {
         from: process.env.BREVO_FROM || 'Your Name <your@email.com>',
         to,
+        subject,
+        html,
+    };
+    return transporter.sendMail(mailOptions);
+}
+async function sendMailV2({ to, from, name, subject, html }) {
+    const mailOptions = {
+        from: process.env.BREVO_FROM,
+        to: to ?? process.env.BREVO_FROM,
         subject,
         html,
     };

@@ -25,4 +25,39 @@ model User {
   email_verified_at        DateTime?
   email_verification_token String?
   password_reset_token     String?
+  portfolios               Portfolio[]
+  blogs                    Blog[]   
+}
+
+model Portfolio {
+  id           String   @id @default(uuid())
+  portfolioUrl String   @default("demo") @unique
+  title        String
+  description  String
+  updatedAt    DateTime @updatedAt
+  personalDetails Json
+  experience   Json
+  skills       Json
+  projects     Json
+  education    Json
+  achievements Json
+  hobbies      Json
+  contact      Json
+  createdAt    DateTime @default(now())
+  blogs        Blog[]   
+  userId       Int
+  user         User     @relation(fields: [userId], references: [id])
+}
+
+model Blog {
+  id          String   @id @default(uuid())
+  title       String
+  content     String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  portfolioId String
+  imageUrl   String?
+  portfolio   Portfolio @relation(fields: [portfolioId], references: [id])
+  userId      Int?
+  user        User?     @relation(fields: [userId], references: [id])
 }
