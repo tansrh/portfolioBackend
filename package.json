@@ -11,7 +11,8 @@
     "watch": "tsc -w",
     "build": "tsc",
     "copy-templates": "cp -R src/config/emailTemplates dist/config/",
-    "dev2": "concurrently \"node dist/scripts/drainEmailQueue.js\" \"node dist/workers/emailWorker.js\" \"npm run watch\" \"npm run server\""
+    "dev2": "concurrently \"node dist/scripts/drainEmailQueue.js\" \"node dist/workers/emailWorker.js\" \"npm run watch\" \"npm run server\"",
+    "prod": "concurrently \"node dist/scripts/drainEmailQueue.js\" \"node dist/workers/emailWorker.js\" \"node dist/index.js\""
   },
   "keywords": [],
   "author": "",
