@@ -108,6 +108,7 @@ export const getUser = async (req: Request & Partial<{ user: any }>, res: Respon
 export const signout = (req: Request, res: Response) => {
     res.clearCookie('auth_token', {
         httpOnly: true,
+        sameSite: "none",
         secure: process.env.NODE_ENV === 'production',
     });
     res.status(200).json({ message: "Signed out successfully" });

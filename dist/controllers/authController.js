@@ -113,6 +113,7 @@ exports.getUser = getUser;
 const signout = (req, res) => {
     res.clearCookie('auth_token', {
         httpOnly: true,
+        sameSite: "none",
         secure: process.env.NODE_ENV === 'production',
     });
     res.status(200).json({ message: "Signed out successfully" });
