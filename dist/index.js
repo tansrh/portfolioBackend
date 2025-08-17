@@ -13,7 +13,7 @@ const port = process.env.PORT || 3001;
 app.use(express_1.default.json());
 app.use(express_1.default.urlencoded({ extended: false }));
 app.use((0, cors_1.default)({
-    origin: "http://localhost:3000",
+    origin: process.env.CLIENT_APP_URL,
     credentials: true
 }));
 // routes
