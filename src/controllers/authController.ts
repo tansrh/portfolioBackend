@@ -78,7 +78,7 @@ export const signin = async (req: Request, res: Response) => {
         const token = jwt.sign(jwtPayload, process.env.SECRET_KEY!, { expiresIn: '30d' });
         res.cookie('auth_token', token, {
             httpOnly: true, 
-            sameSite: "lax",
+            sameSite: "none",
             secure: process.env.NODE_ENV === 'production',
             maxAge: 30 * 24 * 60 * 60 * 1000
         });
