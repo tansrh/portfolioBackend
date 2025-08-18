@@ -1,7 +1,7 @@
 import { Request, Response } from "express";
 import { signinSchema, signupSchema } from "../validations/authValidations";
 import { ZodError } from "zod";
-import { formatZodError } from "../Utils";
+import { formatZodError, getCookie } from "../Utils";
 import prisma from "../config/database";
 import bcrypt from "bcrypt";
 import { v4 as uuidv4 } from 'uuid';
@@ -9,6 +9,18 @@ import jwt from "jsonwebtoken";
 import 'dotenv/config';
 import { getHtml } from "../config/mail";
 import { emailQueue } from "../queues/emailQueue";
+
+
+const ACCESS_TOKEN_LIFE = "30m";
+const REFRESH_TOKEN_LIFE = "7d";
+
+function generateAccessToken(payload: object) {
+    return jwt.sign(payload, process.env.SECRET_KEY!, { expiresIn: ACCESS_TOKEN_LIFE });
+}
+
+function generateRefreshToken(payload: object) {
+    return jwt.sign(payload, process.env.REFRESH_SECRET!, { expiresIn: REFRESH_TOKEN_LIFE });
+}
 export const signup = async (req: Request, res: Response) => {
     try {
         const body = req.body;
@@ -75,12 +87,20 @@ export const signin = async (req: Request, res: Response) => {
             name: user.name,
             isVerified: user.email_verified_at !== null
         };
-        const token = jwt.sign(jwtPayload, process.env.SECRET_KEY!, { expiresIn: '30d' });
-        res.cookie('auth_token', token, {
-            httpOnly: true, 
+        // const token = jwt.sign(jwtPayload, process.env.SECRET_KEY!, { expiresIn: '30d' });
+        const accessToken = generateAccessToken(jwtPayload);
+        const refreshToken = generateRefreshToken(jwtPayload);
+        res.cookie('auth_token', accessToken, {
+            httpOnly: true,
             sameSite: "none",
             secure: process.env.NODE_ENV === 'production',
-            maxAge: 30 * 24 * 60 * 60 * 1000
+            maxAge: 30 * 60 * 1000
+        });
+        res.cookie('refresh_token', refreshToken, {
+            httpOnly: true,
+            sameSite: "none",
+            secure: process.env.NODE_ENV === 'production',
+            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
         });
         return res.status(200).json({
             message: "User signed in successfully",
@@ -111,5 +131,49 @@ export const signout = (req: Request, res: Response) => {
         sameSite: "none",
         secure: process.env.NODE_ENV === 'production',
     });
+    res.clearCookie('refresh_token', {
+        httpOnly: true,
+        sameSite: "none",
+        secure: process.env.NODE_ENV === 'production',
+    });
     res.status(200).json({ message: "Signed out successfully" });
+};
+
+export const refreshToken = (req: Request, res: Response) => {
+    const refreshToken = getCookie(req, 'refresh_token');
+    if (!refreshToken) {
+        return res.status(401).json({ message: "No refresh token" });
+    }
+    try {
+        // Verify refresh token
+        const payload = jwt.verify(refreshToken, process.env.REFRESH_SECRET!);
+
+        // Issue new access token (shorter life)
+        // const accessToken = jwt.sign(
+        //     { id: payload.id, email: payload.email, name: payload.name },
+        //     process.env.SECRET_KEY!,
+        //     { expiresIn: "5m" } // 5 minutes for example
+        // );
+        const { exp, iat, ...rest } = payload as any;
+        const accessToken = generateAccessToken(rest as object);
+        const newRefreshToken = generateRefreshToken(rest as object);
+
+
+        res.cookie("auth_token", accessToken, {
+            httpOnly: true,
+            sameSite: "none",
+            secure: process.env.NODE_ENV === "production",
+            maxAge: 30 * 60 * 1000, // 5 minutes
+        });
+        res.cookie("refresh_token", newRefreshToken, {
+            httpOnly: true,
+            sameSite: "none",
+            secure: process.env.NODE_ENV === "production",
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        });
+        return res.status(200).json({ message: "Tokens refreshed successfully" });
+    } catch (err) {
+        console.error("Refresh token error:", err);
+        return res.status(401).json({ message: "Invalid refresh token" });
+    }
 };

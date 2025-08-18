@@ -3,7 +3,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.signout = exports.getUser = exports.signin = exports.signup = void 0;
+exports.refreshToken = exports.signout = exports.getUser = exports.signin = exports.signup = void 0;
 const authValidations_1 = require("../validations/authValidations");
 const zod_1 = require("zod");
 const Utils_1 = require("../Utils");
@@ -14,6 +14,14 @@ const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 require("dotenv/config");
 const mail_1 = require("../config/mail");
 const emailQueue_1 = require("../queues/emailQueue");
+const ACCESS_TOKEN_LIFE = "30m";
+const REFRESH_TOKEN_LIFE = "7d";
+function generateAccessToken(payload) {
+    return jsonwebtoken_1.default.sign(payload, process.env.SECRET_KEY, { expiresIn: ACCESS_TOKEN_LIFE });
+}
+function generateRefreshToken(payload) {
+    return jsonwebtoken_1.default.sign(payload, process.env.REFRESH_SECRET, { expiresIn: REFRESH_TOKEN_LIFE });
+}
 const signup = async (req, res) => {
     try {
         const body = req.body;
@@ -80,12 +88,20 @@ const signin = async (req, res) => {
             name: user.name,
             isVerified: user.email_verified_at !== null
         };
-        const token = jsonwebtoken_1.default.sign(jwtPayload, process.env.SECRET_KEY, { expiresIn: '30d' });
-        res.cookie('auth_token', token, {
+        // const token = jwt.sign(jwtPayload, process.env.SECRET_KEY!, { expiresIn: '30d' });
+        const accessToken = generateAccessToken(jwtPayload);
+        const refreshToken = generateRefreshToken(jwtPayload);
+        res.cookie('auth_token', accessToken, {
             httpOnly: true,
             sameSite: "none",
             secure: process.env.NODE_ENV === 'production',
-            maxAge: 30 * 24 * 60 * 60 * 1000
+            maxAge: 30 * 60 * 1000
+        });
+        res.cookie('refresh_token', refreshToken, {
+            httpOnly: true,
+            sameSite: "none",
+            secure: process.env.NODE_ENV === 'production',
+            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
         });
         return res.status(200).json({
             message: "User signed in successfully",
@@ -116,6 +132,48 @@ const signout = (req, res) => {
         sameSite: "none",
         secure: process.env.NODE_ENV === 'production',
     });
+    res.clearCookie('refresh_token', {
+        httpOnly: true,
+        sameSite: "none",
+        secure: process.env.NODE_ENV === 'production',
+    });
     res.status(200).json({ message: "Signed out successfully" });
 };
 exports.signout = signout;
+const refreshToken = (req, res) => {
+    const refreshToken = (0, Utils_1.getCookie)(req, 'refresh_token');
+    if (!refreshToken) {
+        return res.status(401).json({ message: "No refresh token" });
+    }
+    try {
+        // Verify refresh token
+        const payload = jsonwebtoken_1.default.verify(refreshToken, process.env.REFRESH_SECRET);
+        // Issue new access token (shorter life)
+        // const accessToken = jwt.sign(
+        //     { id: payload.id, email: payload.email, name: payload.name },
+        //     process.env.SECRET_KEY!,
+        //     { expiresIn: "5m" } // 5 minutes for example
+        // );
+        const { exp, iat, ...rest } = payload;
+        const accessToken = generateAccessToken(rest);
+        const newRefreshToken = generateRefreshToken(rest);
+        res.cookie("auth_token", accessToken, {
+            httpOnly: true,
+            sameSite: "none",
+            secure: process.env.NODE_ENV === "production",
+            maxAge: 30 * 60 * 1000, // 5 minutes
+        });
+        res.cookie("refresh_token", newRefreshToken, {
+            httpOnly: true,
+            sameSite: "none",
+            secure: process.env.NODE_ENV === "production",
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        });
+        return res.status(200).json({ message: "Tokens refreshed successfully" });
+    }
+    catch (err) {
+        console.error("Refresh token error:", err);
+        return res.status(401).json({ message: "Invalid refresh token" });
+    }
+};
+exports.refreshToken = refreshToken;
