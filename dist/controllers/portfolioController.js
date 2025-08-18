@@ -78,7 +78,7 @@ async function updatePortfolio(req, res) {
                 portfolioUrl: rest.portfolioUrl
             }
         });
-        if (existingPortfolio) {
+        if (existingPortfolio && existingPortfolio.id !== id) {
             return res.status(409).json({ message: "Portfolio with this URL already exists." });
         }
         const updatedPortfolio = await database_1.default.portfolio.update({

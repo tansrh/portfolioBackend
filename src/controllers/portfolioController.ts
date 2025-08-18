@@ -76,7 +76,7 @@ export async function updatePortfolio(req: Request & Partial<{ user: any }>, res
                 portfolioUrl: rest.portfolioUrl
             }
         });
-        if (existingPortfolio) {
+        if (existingPortfolio && existingPortfolio.id !== id) {
             return res.status(409).json({ message: "Portfolio with this URL already exists." });
         }
 
