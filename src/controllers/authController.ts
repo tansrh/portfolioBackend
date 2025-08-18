@@ -110,6 +110,7 @@ export const signin = async (req: Request, res: Response) => {
         });
 
     } catch (err: any) {
+        console.log("Signin Error: ", err)
         if (err instanceof ZodError) {
             return res.status(400).json(formatZodError(err));
         }
