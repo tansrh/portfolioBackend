@@ -90,16 +90,21 @@ export const signin = async (req: Request, res: Response) => {
         // const token = jwt.sign(jwtPayload, process.env.SECRET_KEY!, { expiresIn: '30d' });
         const accessToken = generateAccessToken(jwtPayload);
         const refreshToken = generateRefreshToken(jwtPayload);
+        const isProd = process.env.NODE_ENV === 'production';
+        const cookieDomain = isProd ? process.env.COOKIE_DOMAIN : undefined;
+
         res.cookie('auth_token', accessToken, {
             httpOnly: true,
             sameSite: "none",
-            secure: process.env.NODE_ENV === 'production',
+            secure: isProd,
+            domain: cookieDomain,
             maxAge: 30 * 60 * 1000
         });
         res.cookie('refresh_token', refreshToken, {
             httpOnly: true,
             sameSite: "none",
-            secure: process.env.NODE_ENV === 'production',
+            secure: isProd,
+            domain: cookieDomain,
             maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
         });
         return res.status(200).json({
@@ -127,15 +132,20 @@ export const getUser = async (req: Request & Partial<{ user: any }>, res: Respon
 }
 
 export const signout = (req: Request, res: Response) => {
+    const isProd = process.env.NODE_ENV === 'production';
+    const cookieDomain = isProd ? process.env.COOKIE_DOMAIN : undefined;
+
     res.clearCookie('auth_token', {
         httpOnly: true,
         sameSite: "none",
-        secure: process.env.NODE_ENV === 'production',
+        secure: isProd,
+        domain: cookieDomain,
     });
     res.clearCookie('refresh_token', {
         httpOnly: true,
         sameSite: "none",
-        secure: process.env.NODE_ENV === 'production',
+        secure: isProd,
+        domain: cookieDomain,
     });
     res.status(200).json({ message: "Signed out successfully" });
 };
@@ -158,18 +168,22 @@ export const refreshToken = (req: Request, res: Response) => {
         const { exp, iat, ...rest } = payload as any;
         const accessToken = generateAccessToken(rest as object);
         const newRefreshToken = generateRefreshToken(rest as object);
+        const isProd = process.env.NODE_ENV === 'production';
+        const cookieDomain = isProd ? process.env.COOKIE_DOMAIN : undefined;
 
 
         res.cookie("auth_token", accessToken, {
             httpOnly: true,
             sameSite: "none",
-            secure: process.env.NODE_ENV === "production",
+            secure: isProd,
+            domain: cookieDomain,
             maxAge: 30 * 60 * 1000, // 5 minutes
         });
         res.cookie("refresh_token", newRefreshToken, {
             httpOnly: true,
             sameSite: "none",
-            secure: process.env.NODE_ENV === "production",
+            secure: isProd,
+            domain: cookieDomain,
             maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
         });
         return res.status(200).json({ message: "Tokens refreshed successfully" });
