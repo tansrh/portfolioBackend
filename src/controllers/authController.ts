@@ -9,10 +9,11 @@ import jwt from "jsonwebtoken";
 import 'dotenv/config';
 import { getHtml } from "../config/mail";
 import { emailQueue } from "../queues/emailQueue";
+import redisClient from "../config/redisClient";
 
 
 const ACCESS_TOKEN_LIFE = "30m";
-const REFRESH_TOKEN_LIFE = "7d";
+const REFRESH_TOKEN_LIFE = "2h";
 
 function generateAccessToken(payload: object) {
     return jwt.sign(payload, process.env.SECRET_KEY!, { expiresIn: ACCESS_TOKEN_LIFE });
@@ -87,30 +88,18 @@ export const signin = async (req: Request, res: Response) => {
             name: user.name,
             isVerified: user.email_verified_at !== null
         };
-        // const token = jwt.sign(jwtPayload, process.env.SECRET_KEY!, { expiresIn: '30d' });
         const accessToken = generateAccessToken(jwtPayload);
         const refreshToken = generateRefreshToken(jwtPayload);
-        const isProd = process.env.NODE_ENV === 'production';
-        const cookieDomain = isProd ? process.env.COOKIE_DOMAIN : undefined;
 
-        res.cookie('auth_token', accessToken, {
-            httpOnly: true,
-            sameSite: "none",
-            secure: isProd,
-            domain: cookieDomain,
-            maxAge: 30 * 60 * 1000
-        });
-        res.cookie('refresh_token', refreshToken, {
-            httpOnly: true,
-            sameSite: "none",
-            secure: isProd,
-            domain: cookieDomain,
-            maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
-        });
+        // Store refresh token in Redis with user ID as key
+        await redisClient.set(`refreshToken:${user.id}`, refreshToken, "EX", 24 * 60 * 60); // 1 day expiry
+
         return res.status(200).json({
             message: "User signed in successfully",
             data: {
-                ...jwtPayload
+                ...jwtPayload,
+                accessToken,
+                refreshToken
             }
         });
 
@@ -131,64 +120,43 @@ export const getUser = async (req: Request & Partial<{ user: any }>, res: Respon
     res.json({ user });
 }
 
-export const signout = (req: Request, res: Response) => {
-    const isProd = process.env.NODE_ENV === 'production';
-    const cookieDomain = isProd ? process.env.COOKIE_DOMAIN : undefined;
-
-    res.clearCookie('auth_token', {
-        httpOnly: true,
-        sameSite: "none",
-        secure: isProd,
-        domain: cookieDomain,
-    });
-    res.clearCookie('refresh_token', {
-        httpOnly: true,
-        sameSite: "none",
-        secure: isProd,
-        domain: cookieDomain,
-    });
+export const signout = async (req: Request & Partial<{ user: any }>, res: Response) => {
+    if (req.user && req.user.id) {
+        await redisClient.del(`refreshToken:${req.user.id}`);
+    }
     res.status(200).json({ message: "Signed out successfully" });
 };
 
-export const refreshToken = (req: Request, res: Response) => {
-    const refreshToken = getCookie(req, 'refresh_token');
-    if (!refreshToken) {
+export const refreshToken = async (req: Request, res: Response) => {
+    const authHeader = req.headers.authorization;
+    if (!authHeader) {
         return res.status(401).json({ message: "No refresh token" });
     }
+    const refreshTokenHeader = req.headers['x-refresh-token'];
+    const refreshToken = Array.isArray(refreshTokenHeader) ? refreshTokenHeader[0] : refreshTokenHeader;
+    if (!refreshToken || typeof refreshToken !== 'string') {
+        return res.status(401).json({ message: "No valid refresh token provided" });
+    }
     try {
-        // Verify refresh token
         const payload = jwt.verify(refreshToken, process.env.REFRESH_SECRET!);
-
-        // Issue new access token (shorter life)
-        // const accessToken = jwt.sign(
-        //     { id: payload.id, email: payload.email, name: payload.name },
-        //     process.env.SECRET_KEY!,
-        //     { expiresIn: "5m" } // 5 minutes for example
-        // );
         const { exp, iat, ...rest } = payload as any;
+        // Check Redis for stored refresh token
+        const storedToken = await redisClient.get(`refreshToken:${rest.id}`);
+        if (storedToken !== refreshToken) {
+            return res.status(401).json({ message: "Refresh token invalid or revoked" });
+        }
         const accessToken = generateAccessToken(rest as object);
         const newRefreshToken = generateRefreshToken(rest as object);
-        const isProd = process.env.NODE_ENV === 'production';
-        const cookieDomain = isProd ? process.env.COOKIE_DOMAIN : undefined;
 
+        // Update Redis with new refresh token
+        await redisClient.set(`refreshToken:${rest.id}`, newRefreshToken, "EX", 24 * 60 * 60);
 
-        res.cookie("auth_token", accessToken, {
-            httpOnly: true,
-            sameSite: "none",
-            secure: isProd,
-            domain: cookieDomain,
-            maxAge: 30 * 60 * 1000, // 5 minutes
+        return res.status(200).json({
+            message: "Tokens refreshed successfully",
+            accessToken,
+            refreshToken: newRefreshToken
         });
-        res.cookie("refresh_token", newRefreshToken, {
-            httpOnly: true,
-            sameSite: "none",
-            secure: isProd,
-            domain: cookieDomain,
-            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-        });
-        return res.status(200).json({ message: "Tokens refreshed successfully" });
     } catch (err) {
-        console.error("Refresh token error:", err);
         return res.status(401).json({ message: "Invalid refresh token" });
     }
 };
